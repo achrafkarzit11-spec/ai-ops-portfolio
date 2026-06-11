@@ -1,0 +1,252 @@
+{
+  "name": "02 — E-commerce Order Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-order",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "02-webhook",
+      "name": "New Order",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        220,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dummyjson.com/users/{{ $json.body.userId }}",
+        "options": {}
+      },
+      "id": "02-http",
+      "name": "Fetch Customer Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const customer = $input.item.json;\nconst order = $('New Order').item.json.body;\nconst orderCount = Number(customer.id || order.userId || 1) % 10;\nlet tier = 'first_timer';\nlet tierLabel = 'First Timer';\nif (orderCount >= 5) { tier = 'vip'; tierLabel = 'VIP Customer'; }\nelse if (orderCount >= 2) { tier = 'returning'; tierLabel = 'Returning Customer'; }\nreturn {\n  firstName: customer.firstName || 'Customer',\n  lastName: customer.lastName || '',\n  email: customer.email || order.email || 'customer@example.com',\n  orderId: order.orderId,\n  product: order.product,\n  amount: order.amount,\n  tier,\n  tierLabel,\n  orderCount,\n  discountCode: tier === 'vip' ? 'VIP20' : tier === 'returning' ? 'RETURN10' : 'WELCOME5'\n};"
+      },
+      "id": "02-code",
+      "name": "Calculate Loyalty Tier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tier-vip",
+              "leftValue": "={{ $json.tier }}",
+              "rightValue": "vip",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "02-if-vip",
+      "name": "Is VIP?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tier-returning",
+              "leftValue": "={{ $json.tier }}",
+              "rightValue": "returning",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "02-if-returning",
+      "name": "Is Returning?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=VIP order confirmed — {{ $json.firstName }}",
+        "message": "=Hi {{ $json.firstName }},\n\nYour order #{{ $json.orderId }} is confirmed and prioritized. Use {{ $json.discountCode }} for 20% off your next order.\n\nThanks for being a VIP customer.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "02-email-vip",
+      "name": "Email — VIP",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1260,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Welcome back {{ $json.firstName }} — order confirmed",
+        "message": "=Hi {{ $json.firstName }},\n\nYour order #{{ $json.orderId }} is confirmed. Use {{ $json.discountCode }} for 10% off your next purchase.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "02-email-return",
+      "name": "Email — Returning",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Order confirmed — welcome {{ $json.firstName }}",
+        "message": "=Hi {{ $json.firstName }},\n\nThanks for your first order. Use {{ $json.discountCode }} for 5% off your next purchase.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "02-email-first",
+      "name": "Email — First Timer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        620
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "New Order": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customer Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Loyalty Tier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Loyalty Tier": {
+      "main": [
+        [
+          {
+            "node": "Is VIP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is VIP?": {
+      "main": [
+        [
+          {
+            "node": "Email — VIP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Returning?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Returning?": {
+      "main": [
+        [
+          {
+            "node": "Email — Returning",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email — First Timer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "portfolio-template-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "achraf-portfolio"
+  },
+  "tags": [
+    "ecommerce",
+    "loyalty",
+    "gmail"
+  ]
+}

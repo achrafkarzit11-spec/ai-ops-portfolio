@@ -1,0 +1,403 @@
+{
+  "name": "06 — Clinic Voice Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clinic-voice-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "06-webhook",
+      "name": "VAPI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        120,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nreturn {\n  intent: body.intent || body.toolCall?.function?.name || 'log_call',\n  patientName: body.patientName || body.name || body.toolCall?.arguments?.patientName || 'Unknown Patient',\n  phone: body.phone || body.caller?.number || body.toolCall?.arguments?.phone || '',\n  date: body.date || body.toolCall?.arguments?.date || '',\n  time: body.time || body.toolCall?.arguments?.time || '',\n  callId: body.callId || body.call?.id || '',\n  transcript: body.transcript || '',\n  receivedAt: new Date().toISOString()\n};"
+      },
+      "id": "06-parse",
+      "name": "Parse VAPI Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "check_slots",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "book_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "log_call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "06-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        640,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "06-read",
+      "name": "Read Appointments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        900,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Demo slot calculator. Replace with real Google Sheets lookup if needed.\nconst requestedDate = $('Parse VAPI Event').item.json.date || new Date().toISOString().slice(0,10);\nconst availableSlots = ['09:00', '10:30', '14:00', '16:30'];\nreturn { date: requestedDate, availableSlots, message: `Available slots for ${requestedDate}: ${availableSlots.join(', ')}` };"
+      },
+      "id": "06-slots",
+      "name": "Calculate Slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"availableSlots\": $json.availableSlots, \"message\": $json.message }",
+        "options": {}
+      },
+      "id": "06-response-slots",
+      "name": "Respond Slots",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1420,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Parse VAPI Event').item.json;\nlet phone = String(data.phone || '').trim().replace(/\\s+/g, '');\nif (phone.startsWith('0')) phone = '+212' + phone.slice(1);\nif (!phone.startsWith('+')) phone = '+212' + phone;\nreturn { ...data, phone };"
+      },
+      "id": "06-normalize",
+      "name": "Normalize Phone",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "patientName": "={{ $json.patientName }}",
+            "phone": "={{ $json.phone }}",
+            "date": "={{ $json.date }}",
+            "time": "={{ $json.time }}",
+            "status": "booked",
+            "createdAt": "={{ $json.receivedAt }}"
+          }
+        }
+      },
+      "id": "06-save",
+      "name": "Save Appointment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1160,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "from": "whatsapp:+14155238886",
+        "to": "=whatsapp:{{ $json.phone }}",
+        "message": "=Hello {{ $json.patientName }}, your appointment is confirmed for {{ $json.date }} at {{ $json.time }}."
+      },
+      "id": "06-whatsapp",
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"booked\", \"message\": \"Appointment confirmed and WhatsApp sent.\" }",
+        "options": {}
+      },
+      "id": "06-response-booked",
+      "name": "Respond Booked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "CallLogs",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "callId": "={{ $json.callId }}",
+            "phone": "={{ $json.phone }}",
+            "intent": "={{ $json.intent }}",
+            "transcript": "={{ $json.transcript }}",
+            "receivedAt": "={{ $json.receivedAt }}"
+          }
+        }
+      },
+      "id": "06-log",
+      "name": "Log Call",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        900,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ok\" }",
+        "options": {}
+      },
+      "id": "06-response-log",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        620
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "VAPI Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse VAPI Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse VAPI Event": {
+      "main": [
+        [
+          {
+            "node": "Route Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Event": {
+      "main": [
+        [
+          {
+            "node": "Read Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Phone",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointments": {
+      "main": [
+        [
+          {
+            "node": "Calculate Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Slots": {
+      "main": [
+        [
+          {
+            "node": "Respond Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Phone": {
+      "main": [
+        [
+          {
+            "node": "Save Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Appointment": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Respond Booked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Call": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "portfolio-template-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "achraf-portfolio"
+  },
+  "tags": [
+    "vapi",
+    "voice-agent",
+    "clinic",
+    "twilio",
+    "sheets"
+  ]
+}

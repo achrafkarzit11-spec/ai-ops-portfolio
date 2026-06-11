@@ -1,0 +1,335 @@
+{
+  "name": "04 — Team Notification Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notification-hub",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "04-webhook",
+      "name": "Incoming Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        180,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst eventType = body.eventType || 'unknown';\nreturn {\n  eventType,\n  name: body.name || 'Unknown',\n  email: body.email || 'unknown@example.com',\n  amount: body.amount || '',\n  message: body.message || '',\n  receivedAt: new Date().toISOString(),\n  raw: body\n};"
+      },
+      "id": "04-code",
+      "name": "Normalize Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "new_lead",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "payment_received",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "payment_failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "cancellation",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "support_ticket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "04-switch",
+      "name": "Route by Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        700,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=🆕 New lead: {{ $json.name }} — {{ $json.email }}",
+        "otherOptions": {}
+      },
+      "id": "04-slack-lead",
+      "name": "Slack — New Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=💰 Payment received: {{ $json.name }} — ${{ $json.amount }}",
+        "otherOptions": {}
+      },
+      "id": "04-slack-paid",
+      "name": "Slack — Payment Received",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        190
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=🚨 Payment failed: {{ $json.name }} — ${{ $json.amount }}",
+        "otherOptions": {}
+      },
+      "id": "04-slack-failed",
+      "name": "Slack — Payment Failed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=⚠️ Cancellation: {{ $json.name }} — {{ $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "04-slack-cancel",
+      "name": "Slack — Cancellation",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        490
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=🎫 Support ticket: {{ $json.name }} — {{ $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "04-slack-support",
+      "name": "Slack — Support Ticket",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL@example.com",
+        "subject": "=Critical payment failed — {{ $json.name }}",
+        "message": "=Payment failed for {{ $json.name }} ({{ $json.email }}). Amount: ${{ $json.amount }}. Received at {{ $json.receivedAt }}.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "04-email-failed",
+      "name": "Email — Critical Payment Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1280,
+        340
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Incoming Event": {
+      "main": [
+        [
+          {
+            "node": "Normalize Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Event": {
+      "main": [
+        [
+          {
+            "node": "Route by Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event Type": {
+      "main": [
+        [
+          {
+            "node": "Slack — New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Payment Received",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Payment Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Cancellation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Support Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Payment Failed": {
+      "main": [
+        [
+          {
+            "node": "Email — Critical Payment Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "portfolio-template-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "achraf-portfolio"
+  },
+  "tags": [
+    "notifications",
+    "slack",
+    "routing",
+    "webhook"
+  ]
+}

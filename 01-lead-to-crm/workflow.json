@@ -1,0 +1,228 @@
+{
+  "name": "01 — Lead Capture Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-capture",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "01-webhook",
+      "name": "Form Submission",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -520,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "email",
+              "leftValue": "={{ $json.body.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "company",
+              "leftValue": "={{ $json.body.company }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "01-if",
+      "name": "Is Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "email": "={{ $json.body.email }}",
+        "additionalFields": {
+          "firstName": "={{ $json.body.firstName }}",
+          "lastName": "={{ $json.body.lastName }}",
+          "companyName": "={{ $json.body.company }}",
+          "phoneNumber": "={{ $json.body.phone }}"
+        }
+      },
+      "id": "01-hubspot",
+      "name": "Add to HubSpot",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=🔥 *HOT LEAD*\nName: {{ $('Form Submission').item.json.body.firstName }} {{ $('Form Submission').item.json.body.lastName }}\nEmail: {{ $('Form Submission').item.json.body.email }}\nCompany: {{ $('Form Submission').item.json.body.company }}\nFollow up within 1 hour.",
+        "otherOptions": {}
+      },
+      "id": "01-slack-hot",
+      "name": "Slack — Hot Lead Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "firstName": "={{ $json.body.firstName }}",
+            "lastName": "={{ $json.body.lastName }}",
+            "email": "={{ $json.body.email }}",
+            "company": "={{ $json.body.company }}",
+            "phone": "={{ $json.body.phone }}",
+            "status": "cold_incomplete",
+            "submittedAt": "={{ new Date().toISOString() }}"
+          }
+        }
+      },
+      "id": "01-sheets",
+      "name": "Save Cold Lead to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        20,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=⚠️ Cold/incomplete lead saved to Sheets: {{ $('Form Submission').item.json.body.email }}",
+        "otherOptions": {}
+      },
+      "id": "01-slack-cold",
+      "name": "Slack — Cold Lead Note",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        300,
+        260
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Form Submission": {
+      "main": [
+        [
+          {
+            "node": "Is Hot Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Hot Lead?": {
+      "main": [
+        [
+          {
+            "node": "Add to HubSpot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Cold Lead to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to HubSpot": {
+      "main": [
+        [
+          {
+            "node": "Slack — Hot Lead Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Cold Lead to Sheets": {
+      "main": [
+        [
+          {
+            "node": "Slack — Cold Lead Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "portfolio-template-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "achraf-portfolio"
+  },
+  "tags": [
+    "lead-capture",
+    "crm",
+    "hubspot",
+    "slack"
+  ]
+}

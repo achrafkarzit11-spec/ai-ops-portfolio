@@ -1,0 +1,175 @@
+{
+  "name": "03 — Scheduled Weekly Business Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "03-schedule",
+      "name": "Every Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://open.er-api.com/v6/latest/USD",
+        "options": {}
+      },
+      "id": "03-currency",
+      "name": "Fetch Currency Rates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.open-meteo.com/v1/forecast?latitude=31.63&longitude=-8.00&current_weather=true&timezone=Africa%2FCasablanca",
+        "options": {}
+      },
+      "id": "03-weather",
+      "name": "Fetch Weather (Marrakech)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        740,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true",
+        "options": {}
+      },
+      "id": "03-crypto",
+      "name": "Fetch Crypto Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const currency = $('Fetch Currency Rates').item.json;\nconst weather = $('Fetch Weather (Marrakech)').item.json;\nconst crypto = $('Fetch Crypto Prices').item.json;\nconst today = new Date().toLocaleDateString('en-GB', { weekday:'long', year:'numeric', month:'long', day:'numeric' });\nconst mad = currency.rates?.MAD?.toFixed(2) || 'N/A';\nconst eur = currency.rates?.EUR?.toFixed(4) || 'N/A';\nconst gbp = currency.rates?.GBP?.toFixed(4) || 'N/A';\nconst temp = weather.current_weather?.temperature || 'N/A';\nconst wind = weather.current_weather?.windspeed || 'N/A';\nconst btc = crypto.bitcoin?.usd?.toLocaleString() || 'N/A';\nconst eth = crypto.ethereum?.usd?.toLocaleString() || 'N/A';\nconst report = `\n<h1>Weekly Business Briefing</h1>\n<p><strong>${today}</strong></p>\n<h2>Currency</h2>\n<ul><li>USD → MAD: ${mad}</li><li>USD → EUR: ${eur}</li><li>USD → GBP: ${gbp}</li></ul>\n<h2>Weather — Marrakech</h2>\n<ul><li>Temperature: ${temp}°C</li><li>Wind: ${wind} km/h</li></ul>\n<h2>Crypto</h2>\n<ul><li>BTC: $${btc}</li><li>ETH: $${eth}</li></ul>\n<p>Generated automatically by n8n.</p>`;\nreturn { today, report };"
+      },
+      "id": "03-format",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL@example.com",
+        "subject": "=Weekly Briefing — {{ $json.today }}",
+        "message": "={{ $json.report }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "03-gmail",
+      "name": "Send Weekly Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        280
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Monday 8am": {
+      "main": [
+        [
+          {
+            "node": "Fetch Currency Rates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Currency Rates": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather (Marrakech)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather (Marrakech)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Crypto Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Crypto Prices": {
+      "main": [
+        [
+          {
+            "node": "Format Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Report": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "portfolio-template-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "achraf-portfolio"
+  },
+  "tags": [
+    "scheduled",
+    "reporting",
+    "gmail",
+    "api"
+  ]
+}

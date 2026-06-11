@@ -1,0 +1,385 @@
+{
+  "name": "05 — AI Lead Qualifier",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-lead-qualifier",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "05-webhook",
+      "name": "New Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $json.body || $json;\nconst prompt = `Score this B2B lead from 1 to 10.\nReturn only JSON with: score, label, action, reason.\nCriteria: urgency, budget, decision authority, company fit, message clarity.\nLead: ${JSON.stringify(lead)}`;\nreturn { ...lead, prompt, submittedAt: new Date().toISOString() };"
+      },
+      "id": "05-prep",
+      "name": "Prepare Lead + Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [{\"role\": \"user\", \"content\": $json.prompt}],\n  \"temperature\": 0.2\n}",
+        "options": {}
+      },
+      "id": "05-openai",
+      "name": "OpenAI — Score Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let content = $json.choices?.[0]?.message?.content || '{}';\ncontent = content.replace(/```json|```/g, '').trim();\nlet ai;\ntry { ai = JSON.parse(content); } catch(e) { ai = { score: 5, label: 'Warm', action: 'Manual review', reason: 'Could not parse AI response' }; }\nconst lead = $('Prepare Lead + Prompt').item.json;\nreturn { ...lead, score: Number(ai.score || 5), label: ai.label || 'Warm', action: ai.action || 'Manual review', reason: ai.reason || '' };"
+      },
+      "id": "05-parse",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.name }}",
+            "company": "={{ $json.company }}",
+            "email": "={{ $json.email }}",
+            "role": "={{ $json.role }}",
+            "budget": "={{ $json.budget }}",
+            "message": "={{ $json.message }}",
+            "source": "={{ $json.source }}",
+            "score": "={{ $json.score }}",
+            "label": "={{ $json.label }}",
+            "action": "={{ $json.action }}",
+            "reason": "={{ $json.reason }}",
+            "submittedAt": "={{ $json.submittedAt }}"
+          }
+        }
+      },
+      "id": "05-sheets",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "score-hot",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 8,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "05-if-hot",
+      "name": "Is Hot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "email": "={{ $json.email }}",
+        "additionalFields": {
+          "companyName": "={{ $json.company }}",
+          "firstName": "={{ $json.name }}"
+        }
+      },
+      "id": "05-hubspot",
+      "name": "Add Hot Lead to HubSpot",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=🔥 AI HOT LEAD — Score {{ $json.score }}/10\n{{ $json.name }} — {{ $json.company }}\nReason: {{ $json.reason }}",
+        "otherOptions": {}
+      },
+      "id": "05-slack-hot",
+      "name": "Slack — Hot Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1940,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL@example.com",
+        "subject": "=Hot AI lead — {{ $json.name }} score {{ $json.score }}/10",
+        "message": "=Lead: {{ $json.name }}\nCompany: {{ $json.company }}\nEmail: {{ $json.email }}\nReason: {{ $json.reason }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "05-email-hot",
+      "name": "Gmail — Notify Sales",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "score-warm",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "05-if-warm",
+      "name": "Is Warm?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=🟡 Warm lead — Score {{ $json.score }}/10\n{{ $json.name }} — {{ $json.company }}\nReason: {{ $json.reason }}",
+        "otherOptions": {}
+      },
+      "id": "05-slack-warm",
+      "name": "Slack — Warm Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1940,
+        460
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "New Lead": {
+      "main": [
+        [
+          {
+            "node": "Prepare Lead + Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Lead + Prompt": {
+      "main": [
+        [
+          {
+            "node": "OpenAI — Score Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI — Score Lead": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Is Hot?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Hot?": {
+      "main": [
+        [
+          {
+            "node": "Add Hot Lead to HubSpot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Warm?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Hot Lead to HubSpot": {
+      "main": [
+        [
+          {
+            "node": "Slack — Hot Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Hot Lead": {
+      "main": [
+        [
+          {
+            "node": "Gmail — Notify Sales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Warm?": {
+      "main": [
+        [
+          {
+            "node": "Slack — Warm Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "portfolio-template-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "achraf-portfolio"
+  },
+  "tags": [
+    "ai",
+    "lead-scoring",
+    "openai",
+    "sales-ops"
+  ]
+}
